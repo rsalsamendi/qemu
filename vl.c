@@ -2680,8 +2680,9 @@ static const QEMUOption *lookup_opt(int argc, char **argv,
     popt = qemu_options;
     for(;;) {
         if (!popt->name) {
-            error_report("invalid option");
-            exit(1);
+            // error_report("invalid option");
+            // exit(1);
+	    break;
         }
         if (!strcmp(popt->name, r + 1))
             break;
@@ -2986,7 +2987,21 @@ static void user_register_global_props(void)
                       global_init_func, NULL, NULL);
 }
 
-int main(int argc, char **argv, char **envp)
+/*
+ * Note: we should see that these properties are actually having a
+ * priority: accel < machine < user. This means e.g. when user
+ * specifies something in "-global", it'll always be used with highest
+ * priority than either machine/accelerator compat properties.
+ */
+static void register_global_properties(MachineState *ms)
+{
+    accel_register_compat_props(ms->accelerator);
+    machine_register_compat_props(ms);
+    user_register_global_props();
+}
+
+int fmain(int argc, char **argv, char **envp);
+int fmain(int argc, char **argv, char **envp)
 {
     int i;
     int snapshot, linux_boot;
@@ -3100,6 +3115,8 @@ int main(int argc, char **argv, char **envp)
             const QEMUOption *popt;
 
             popt = lookup_opt(argc, argv, &optarg, &optind);
+	    if (!popt)
+		    continue;
             switch (popt->index) {
             case QEMU_OPTION_nouserconfig:
                 userconfig = false;
@@ -3127,8 +3144,9 @@ int main(int argc, char **argv, char **envp)
 
             popt = lookup_opt(argc, argv, &optarg, &optind);
             if (!(popt->arch_mask & arch_type)) {
-                error_report("Option not supported for this target");
-                exit(1);
+                // error_report("Option not supported for this target");
+                // exit(1);
+		continue;
             }
             switch(popt->index) {
             case QEMU_OPTION_cpu:
@@ -3833,12 +3851,15 @@ int main(int argc, char **argv, char **envp)
                 break;
             case QEMU_OPTION_readconfig:
                 {
-                    int ret = qemu_read_config_file(optarg);
+                    // int ret = qemu_read_config_file(optarg);
+                    int ret = qemu_read_config_file("vm.conf");
                     if (ret < 0) {
+			fprintf(stderr, "config not used.\n");
                         error_report("read config %s: %s", optarg,
                                      strerror(-ret));
                         exit(1);
                     }
+		    fprintf(stderr, "config used.\n");
                     break;
                 }
             case QEMU_OPTION_spice:
@@ -4630,3 +4651,123 @@ int main(int argc, char **argv, char **envp)
 
     return 0;
 }
+
+int LLVMFuzzerTestOneInput(const uint8_t* Data, size_t Size);
+int LLVMFuzzerTestOneInput(const uint8_t* Data, size_t Size)
+{
+	uint32_t port;
+	uint8_t len;
+	uint32_t i;
+	uint32_t count;
+	if (Size <= 5)
+		return 0;
+	memcpy(&port, Data, 4); Data += 4; Size -= 4;
+	port &= 0xffff;
+	len = ((*Data & 3) + 1); Data++; Size--;
+	count = (Size / len);
+	for (i = 0; i < count; i++)
+	{
+		uint16_t data2;
+		uint32_t data4;
+		switch (len)
+		{
+		case 1:
+			cpu_outb(port, *Data);
+			Data++;
+			break;
+		case 2:
+			memcpy(&data2, Data, 2);
+			cpu_outw(port, data2);
+			Data += 2;
+			break;
+		case 4:
+			memcpy(&data4, Data, 4);
+			cpu_outl(port, data4);
+			Data += 4;
+			break;
+		}
+	}
+	return 0;
+}
+
+// int LLVMFuzzerTestOneInput(const uint8_t* Data, size_t Size)
+// {
+// 	int i;
+// 	if (!Size)
+// 		return 0;
+// 	cpu_outb(0x3b0, *Data); Size--; Data++;
+// 	if (!Size)
+// 		return 0;
+// 	cpu_outb(0x3b4, *Data); Size--; Data++;
+// 	if (!Size)
+// 		return 0;
+// 	cpu_outb(0x3b5, *Data); Size--; Data++;
+// 	if (!Size)
+// 		return 0;
+// 	cpu_outb(0x3ba, *Data); Size--; Data++;
+// 	if (!Size)
+// 		return 0;
+// 	cpu_outb(0x3c0, *Data); Size--; Data++;
+// 	if (!Size)
+// 		return 0;
+// 	cpu_outb(0x3c0, *Data); Size--; Data++;
+// 	if (!Size)
+// 		return 0;
+// 	cpu_outb(0x3c2, *Data); Size--; Data++;
+// 	if (!Size)
+// 		return 0;
+// 	cpu_outb(0x3c5, *Data); Size--; Data++;
+// 	if (!Size)
+// 		return 0;
+// 	cpu_outb(0x3c7, *Data); Size--; Data++;
+// 	if (!Size)
+// 		return 0;
+// 	cpu_outb(0x3c8, *Data); Size--; Data++;
+// 	if (!Size)
+// 		return 0;
+// 	cpu_outb(0x3c9, *Data); Size--; Data++;
+// 	if (!Size)
+// 		return 0;
+// 	cpu_outb(0x3ca, *Data); Size--; Data++;
+// 	if (!Size)
+// 		return 0;
+// 	cpu_outb(0x3cc, *Data); Size--; Data++;
+// 	if (!Size)
+// 		return 0;
+// 	cpu_outb(0x3ce, *Data); Size--; Data++;
+// 	if (!Size)
+// 		return 0;
+// 	cpu_outb(0x3cf, *Data); Size--; Data++;
+// 	if (!Size)
+// 		return 0;
+// 	cpu_physical_memory_write(0xa0000, Data, Size);
+// 	return 0;
+// }
+
+typedef struct Args
+{
+	int argc;
+	char** argv;
+} Args;
+
+static void* MainThread(void* arg)
+{
+	Args* args = (Args*)arg;
+	fprintf(stderr, "before main\n");
+	fmain(args->argc, args->argv, NULL);
+	fprintf(stderr, "after main\n");
+	return NULL;
+}
+
+int LLVMFuzzerInitialize(int* argc, char*** argv);
+int LLVMFuzzerInitialize(int* argc, char*** argv)
+{
+	QemuThread thread;
+	Args args;
+	args.argc = *argc;
+	args.argv = *argv;
+	qemu_thread_create(&thread, "qemumain", MainThread, &args, 0);
+	sleep(10);
+	return 0;
+}
+

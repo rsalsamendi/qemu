@@ -197,7 +197,7 @@ ifdef CONFIG_SOFTMMU
 $(QEMU_PROG_BUILD): config-devices.mak
 endif
 
-COMMON_LDADDS = ../libqemuutil.a
+COMMON_LDADDS = ../libqemuutil.a ../libqemustub.a /home/ryan/src/llvm/llvm/lib/Fuzzer/libFuzzer.a
 
 # build either PROG or PROGW
 $(QEMU_PROG_BUILD): $(all-obj-y) $(COMMON_LDADDS)
