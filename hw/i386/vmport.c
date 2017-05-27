@@ -70,6 +70,9 @@ static uint64_t vmport_ioport_read(void *opaque, hwaddr addr,
     unsigned char command;
     uint32_t eax;
 
+    if (!cpu)
+	    return 0;
+
     cpu_synchronize_state(cs);
 
     eax = env->regs[R_EAX];
@@ -91,6 +94,8 @@ static void vmport_ioport_write(void *opaque, hwaddr addr,
                                 uint64_t val, unsigned size)
 {
     X86CPU *cpu = X86_CPU(current_cpu);
+    if (!cpu)
+	   return;
 
     cpu->env.regs[R_EAX] = vmport_ioport_read(opaque, addr, 4);
 }
