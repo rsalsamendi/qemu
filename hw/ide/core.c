@@ -1078,7 +1078,7 @@ static void ide_flush_cb(void *opaque, int ret)
 
 static void ide_flush_cache(IDEState *s)
 {
-    if (s->blk == NULL) {
+    if (s->blk == NULL || (!blk_bs(s->blk))) {
         ide_flush_cb(s, 0);
         return;
     }
