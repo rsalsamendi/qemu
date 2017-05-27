@@ -4661,6 +4661,8 @@ int LLVMFuzzerTestOneInput(const uint8_t* Data, size_t Size)
 	uint32_t count;
 	if (Size <= 5)
 		return 0;
+	current_cpu = qemu_get_cpu(0);
+	first_cpu = qemu_get_cpu(0);
 	memcpy(&port, Data, 4); Data += 4; Size -= 4;
 	port &= 0xffff;
 	len = ((*Data & 3) + 1); Data++; Size--;
