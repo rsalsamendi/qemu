@@ -4761,13 +4761,34 @@ static void* MainThread(void* arg)
 	return NULL;
 }
 
+char* g_args[] =
+{
+	"/home/ryan/src/qemu/x86_64-softmmu/qemu-system-x86_64",
+	"-machine q35",
+	"-soundhw hda",
+	"-hda ./huh.img",
+	"-usb",
+	"-usbdevice mouse",
+	"-usbdevice tablet",
+	"-usbdevice keyboard",
+	"-usbdevice bt",
+	"-usbdevice serial",
+	"-usbdevice wacom-tablet",
+	"-usbdevice disk:./huh2.img",
+	"-net nic,rtl8139",
+	"-net nic,ne2k_pci",
+	"-net nic,e1000",
+	"-S",
+	"-nographic"
+};
+
 int LLVMFuzzerInitialize(int* argc, char*** argv);
 int LLVMFuzzerInitialize(int* argc, char*** argv)
 {
 	QemuThread thread;
 	Args args;
-	args.argc = *argc;
-	args.argv = *argv;
+	args.argc = (int)(sizeof(g_args) / sizeof(g_args[0]));
+	args.argv = g_args;
 	qemu_thread_create(&thread, "qemumain", MainThread, &args, 0);
 	sleep(10);
 	return 0;
