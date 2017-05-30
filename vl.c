@@ -4652,8 +4652,77 @@ int fmain(int argc, char **argv, char **envp)
     return 0;
 }
 
-int LLVMFuzzerTestOneInput(const uint8_t* Data, size_t Size);
-int LLVMFuzzerTestOneInput(const uint8_t* Data, size_t Size)
+typedef struct PciAddress
+{
+	struct
+	{
+		uint32_t reg : 8;
+		uint32_t func : 3;
+		uint32_t dev : 5;
+		uint32_t bus : 8;
+		uint32_t reservedB : 7;
+		uint32_t enable : 1;
+	};
+	uint32_t value;
+} PciAddress;
+
+typedef struct PciBarData
+{
+	PciAddress addr;
+	uint64_t len;
+} PciBarData;
+
+static const PciBarData g_pciBars[] =
+{
+	{ .addr = { .enable = 1, .bus = 0, .dev = 0, .func = 0, .reg = 0x40}, .len = 4096},
+	{ .addr = { .enable = 1, .bus = 0, .dev = 0, .func = 0, .reg = 0x48}, .len = 32768},
+	{ .addr = { .enable = 1, .bus = 0, .dev = 0, .func = 0, .reg = 0x60}, .len = 4096},
+	{ .addr = { .enable = 1, .bus = 0, .dev = 0, .func = 0, .reg = 0x68}, .len = 4096},
+
+
+	{ .addr = { .enable = 1, .bus = 0, .dev = 1, .func = 0, .reg = 0x10}, .len = 16777216},
+	{ .addr = { .enable = 1, .bus = 0, .dev = 1, .func = 0, .reg = 0x18}, .len = 4096},
+	{ .addr = { .enable = 1, .bus = 0, .dev = 1, .func = 0, .reg = 0x28}, .len = 65536},
+
+	{ .addr = { .enable = 1, .bus = 0, .dev = 2, .func = 0, .reg = 0x10}, .len = 131072},
+	// IO { .addr = { .enable = 1, .bus = 0, .dev = 2, .func = 0, .reg = 0x14}, .len = 64},
+	{ .addr = { .enable = 1, .bus = 0, .dev = 2, .func = 0, .reg = 0x28}, .len = 262144},
+
+	{ .addr = { .enable = 1, .bus = 0, .dev = 3, .func = 0, .reg = 0x10}, .len = 131072},
+	// IO { .addr = { .enable = 1, .bus = 0, .dev = 3, .func = 0, .reg = 0x14}, .len = 64},
+	{ .addr = { .enable = 1, .bus = 0, .dev = 3, .func = 0, .reg = 0x28}, .len = 262144},
+
+	{ .addr = { .enable = 1, .bus = 0, .dev = 4, .func = 0, .reg = 0x10}, .len = 131072},
+	// IO { .addr = { .enable = 1, .bus = 0, .dev = 4, .func = 0, .reg = 0x14}, .len = 64},
+	{ .addr = { .enable = 1, .bus = 0, .dev = 4, .func = 0, .reg = 0x28}, .len = 262144},
+
+	{ .addr = { .enable = 1, .bus = 0, .dev = 29, .func = 7, .reg = 0x10}, .len = 4096},
+
+	{ .addr = { .enable = 1, .bus = 0, .dev = 31, .func = 2, .reg = 0x24}, .len = 4096},
+
+};
+
+static int FuzzMemBar(const uint8_t* Data, size_t Size)
+{
+	static const size_t barCount = (sizeof(g_pciBars) / sizeof(g_pciBars[0]));
+	const uint8_t bar = (*Data % barCount);
+	const uint64_t base = (0xc0000000 + (((uint64_t)bar) << 24ull));
+	uint64_t offset;
+	uint64_t addr;
+
+	Data++;
+	Size--;
+	if (Size < 5)
+		return 0;
+
+	memcpy(&offset, Data, 4);
+	offset %= g_pciBars[bar].len;
+	addr = (base + offset);
+
+	cpu_physical_memory_write(addr, Data, Size);
+}
+
+static int FuzzPort(const uint8_t* Data, size_t Size)
 {
 	uint32_t port;
 	uint8_t len;
@@ -4690,6 +4759,20 @@ int LLVMFuzzerTestOneInput(const uint8_t* Data, size_t Size)
 		}
 	}
 	return 0;
+}
+
+int LLVMFuzzerTestOneInput(const uint8_t* Data, size_t Size);
+int LLVMFuzzerTestOneInput(const uint8_t* Data, size_t Size)
+{
+	uint8_t test;
+	if (Size <= 1)
+		return 0;
+	Size--;
+	test = (*(Data++) * 3);
+	if (test)
+		FuzzPort(Data, Size);
+	else
+		FuzzMemBar(Data, Size);
 }
 
 // int LLVMFuzzerTestOneInput(const uint8_t* Data, size_t Size)
@@ -4775,9 +4858,9 @@ char* g_args[] =
 	"-usbdevice serial",
 	"-usbdevice wacom-tablet",
 	"-usbdevice disk:./huh2.img",
-	"-net nic,rtl8139",
-	"-net nic,ne2k_pci",
-	"-net nic,e1000",
+	"-net nic,name=rtl8139",
+	"-net nic,name=ne2k_pci",
+	"-net nic,name=e1000",
 	"-S",
 	"-nographic"
 };
@@ -4786,11 +4869,22 @@ int LLVMFuzzerInitialize(int* argc, char*** argv);
 int LLVMFuzzerInitialize(int* argc, char*** argv)
 {
 	QemuThread thread;
+	size_t i;
 	Args args;
+	static const size_t barCount = (sizeof(g_pciBars) / sizeof(g_pciBars[0]));
+
 	args.argc = (int)(sizeof(g_args) / sizeof(g_args[0]));
 	args.argv = g_args;
 	qemu_thread_create(&thread, "qemumain", MainThread, &args, 0);
 	sleep(10);
+
+	for (i = 0; i < barCount; i++)
+	{
+		const uint32_t addr = (0xc0000000 + (i << 24));
+		cpu_outl(0xcf8, g_pciBars[i].addr.value);
+		cpu_outl(0xcfc, addr);
+	}
+
 	return 0;
 }
 
