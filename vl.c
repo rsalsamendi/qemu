@@ -2987,19 +2987,6 @@ static void user_register_global_props(void)
                       global_init_func, NULL, NULL);
 }
 
-/*
- * Note: we should see that these properties are actually having a
- * priority: accel < machine < user. This means e.g. when user
- * specifies something in "-global", it'll always be used with highest
- * priority than either machine/accelerator compat properties.
- */
-static void register_global_properties(MachineState *ms)
-{
-    accel_register_compat_props(ms->accelerator);
-    machine_register_compat_props(ms);
-    user_register_global_props();
-}
-
 int fmain(int argc, char **argv, char **envp);
 int fmain(int argc, char **argv, char **envp)
 {
@@ -4720,7 +4707,9 @@ static int FuzzMemBar(const uint8_t* Data, size_t Size)
 	addr = (base + offset);
 
 	cpu_physical_memory_write(addr, Data, Size);
+	return 0;
 }
+
 
 static int FuzzPort(const uint8_t* Data, size_t Size)
 {
@@ -4731,7 +4720,7 @@ static int FuzzPort(const uint8_t* Data, size_t Size)
 	if (Size <= 5)
 		return 0;
 	current_cpu = qemu_get_cpu(0);
-	first_cpu = qemu_get_cpu(0);
+	// first_cpu = qemu_get_cpu(0);
 	memcpy(&port, Data, 4); Data += 4; Size -= 4;
 	port &= 0xffff;
 	len = ((*Data & 3) + 1); Data++; Size--;
@@ -4770,9 +4759,9 @@ int LLVMFuzzerTestOneInput(const uint8_t* Data, size_t Size)
 	Size--;
 	test = (*(Data++) * 3);
 	if (test)
-		FuzzPort(Data, Size);
+		return FuzzPort(Data, Size);
 	else
-		FuzzMemBar(Data, Size);
+		return FuzzMemBar(Data, Size);
 }
 
 // int LLVMFuzzerTestOneInput(const uint8_t* Data, size_t Size)
@@ -4832,19 +4821,19 @@ int LLVMFuzzerTestOneInput(const uint8_t* Data, size_t Size)
 typedef struct Args
 {
 	int argc;
-	char** argv;
+	const char** argv;
 } Args;
 
 static void* MainThread(void* arg)
 {
 	Args* args = (Args*)arg;
 	fprintf(stderr, "before main\n");
-	fmain(args->argc, args->argv, NULL);
+	fmain(args->argc, (char**)args->argv, NULL);
 	fprintf(stderr, "after main\n");
 	return NULL;
 }
 
-char* g_args[] =
+static const char* g_args[] =
 {
 	"/home/ryan/src/qemu/x86_64-softmmu/qemu-system-x86_64",
 	"-machine q35",
